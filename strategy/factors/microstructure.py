@@ -54,7 +54,7 @@ class MicrostructureFactor(FactorBase):
         sub_scores = []
 
         # ---- 1. 订单流不平衡 (Order Flow Imbalance) ----
-        ofi_result = self._estimate_ofi(closes_arr, volumes_arr)
+        ofi_result = self._estimate_ofi(closes_arr, highs_arr, lows_arr, volumes_arr)
         details["order_flow_imbalance"] = ofi_result
         sub_scores.append(ofi_result.get("score", 0) * self.params["ofi_weight"])
 
@@ -95,8 +95,8 @@ class MicrostructureFactor(FactorBase):
             weight=self.weight,
         )
 
-    def _estimate_ofi(self, closes: np.ndarray,
-                       volumes: np.ndarray) -> dict:
+    def _estimate_ofi(self, closes: np.ndarray, highs: np.ndarray,
+                       lows: np.ndarray, volumes: np.ndarray) -> dict:
         """
         估算订单流不平衡 (Order Flow Imbalance)
 
@@ -120,13 +120,13 @@ class MicrostructureFactor(FactorBase):
 
         # 用收盘价相对前一根的变化方向近似判断多空
         for i in range(max(1, len(closes) - n), len(closes)):
-            vol = float(volumes_arr[i]) if i < len(volumes_arr) else 0
+            vol = float(volumes[i]) if i < len(volumes) else 0
             price_change = closes[i] - closes[i - 1]
             body_change = closes[i] - closes[i]  # 简化：用涨跌代替实体
 
             # 改用：如果收盘价 > (高+低)/2 视为偏多
-            mid_price = (float(highs_arr[i]) + float(lows_arr[i])) / 2 \
-                if i < len(highs_arr) and i < len(lows_arr) else closes[i]
+            mid_price = (float(highs[i]) + float(lows[i])) / 2 \
+                if i < len(highs) and i < len(lows) else closes[i]
 
             if closes[i] >= mid_price:
                 buy_vol_total += vol
@@ -233,7 +233,7 @@ class MicrostructureFactor(FactorBase):
     def _analyze_turnover(self, closes: np.ndarray,
                           volumes: np.ndarray) -> float:
         """分析成交活跃度"""
-        if len(volumes_arr := volumes) < 5 or len(closes) < 5:
+        if len(volumes) < 5 or len(closes) < 5:
             return 0.0
 
         # 近期平均成交量 vs 更早期平均

@@ -58,7 +58,7 @@ class StrategyEngine:
         logger.info(f"策略引擎初始化完成: {len(self._factors)}个因子")
 
     def _init_factors(self):
-        """初始化所有因子实例"""
+        """初始化所有因子实例（使用因子自带默认参数）"""
         factor_classes = [
             ("momentum", MomentumFactor),
             ("volatility", VolatilityFactor),
@@ -69,8 +69,9 @@ class StrategyEngine:
         for name, cls in factor_classes:
             weight = FACTOR_WEIGHTS.get(name, 0)
             if weight > 0:
-                config = FactorConfig(name=name, weight=weight)
-                instance = cls(config)
+                # 不传config，让因子使用自带默认参数；之后覆盖weight
+                instance = cls()
+                instance.weight = weight
                 self._factors.append(instance)
                 logger.info(f"  因子加载: {instance}")
 
@@ -119,7 +120,7 @@ class StrategyEngine:
                     risk_level="LOW",
                 )
 
-            current_price = (realtime_quote.get("price") or 0) or \
+            current_price = ((realtime_quote or {}).get("price") or 0) or \
                            (primary_klines[-1]["close"] if primary_klines else 0)
 
             # ---- Step 1: 计算4大因子 ----
