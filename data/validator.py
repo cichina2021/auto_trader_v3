@@ -77,8 +77,8 @@ def validate_kline(df) -> tuple[bool, str]:
     if missing:
         return False, f"K线缺列: {missing}"
 
-    # NaN检测
-    nan_counts = df[required_cols].isnull().sum()
+    # NaN检测 (convert set to list for pandas compatibility)
+    nan_counts = df[list(required_cols)].isnull().sum()
     total_nans = nan_counts.sum()
     if total_nans > 0:
         cols_with_nan = nan_counts[nan_counts > 0].to_dict()

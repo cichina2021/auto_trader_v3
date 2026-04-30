@@ -26,7 +26,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
         self.get_state = getattr(self.__class__, 'get_state', lambda: {})
-        super().__init__(*args, **kwargs)
+        # BaseHTTPRequestHandler only accepts (request, client_address, server)
+        super().__init__(*args)
 
     # 静默日志
     def log_message(self, format, *args):
