@@ -313,4 +313,19 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n用户中断，程序退出。")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n{'='*60}")
+        print(f"程序启动失败!")
+        print(f"{'='*60}")
+        print(f"错误: {type(e).__name__}: {e}")
+        print(f"{'='*60}")
+        import traceback
+        traceback.print_exc()
+        print(f"\n请将以上错误信息截图反馈。")
+        input("\n按回车键退出...")
+        sys.exit(1)
