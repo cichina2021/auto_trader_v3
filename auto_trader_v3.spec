@@ -33,7 +33,7 @@ for root, dirs, files in os.walk('.'):
     for f in files:
         if f.endswith(('.py', '.json', '.csv', '.txt', '.cfg', '.ini', '.yaml', '.yml')):
             src = os.path.join(root, f)
-            dst = root if root != '.' else ''
+            dst = root if root != '.' else '.'
             project_datas.append((src, dst))
 
 a = Analysis(
