@@ -109,20 +109,21 @@ class VolatilityFactor(FactorBase):
 
         # ---- 3. 日内/近期振幅 (Swing Analysis) ----
         swing_score = 0
+        today_swing = 0.0
         if len(closes_arr) >= 5:
             recent_highs = highs_arr[-5:]
             recent_lows = lows_arr[-5:]
             recent_ranges = [(h - l) / l * 100 for h, l in zip(recent_highs, recent_lows)]
             avg_swing = np.mean(recent_ranges)
-            today_swing = recent_ranges[-1]
+            today_swing = float(recent_ranges[-1]) if len(recent_ranges) > 0 else 0.0
 
-            if today_swing > avg_swing * 1.5:  # 今日振幅显著放大
-                swing_score = 0.2             # 活跃交易机会
-            elif today_swing < avg_swing * 0.5:  # 今日振幅萎缩
+            if today_swing > avg_swing * 1.5:
+                swing_score = 0.2
+            elif today_swing < avg_swing * 0.5:
                 swing_score = -0.1
 
         details["swing_analysis"] = {
-            "today_swing_pct": round(today_swing if 'today_swing' in dir() else 0, 2),
+            "today_swing_pct": round(today_swing, 2),
             "score": round(swing_score, 3),
         }
         sub_scores.append(swing_score * self.params["swing_weight"])

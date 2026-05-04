@@ -109,22 +109,15 @@ class MicrostructureFactor(FactorBase):
         if len(closes) < 5:
             return {"ofi_value": 0, "score": 0, "details": {}}
 
-        opens = np.zeros_like(closes)
-        for i, k in enumerate(closes):  # 这里用closes占位，实际应从klines取open
-            pass
-
-        # 从最近的N根K线计算
+        # 从 klines 取 open（OFI需要判断阴线/阳线）
+        # 用收盘价相对前一根的变化方向近似判断多空（降级方案）
         n = min(len(closes), 10)
         buy_vol_total = 0.0
         sell_vol_total = 0.0
 
-        # 用收盘价相对前一根的变化方向近似判断多空
         for i in range(max(1, len(closes) - n), len(closes)):
             vol = float(volumes[i]) if i < len(volumes) else 0
-            price_change = closes[i] - closes[i - 1]
-            body_change = closes[i] - closes[i]  # 简化：用涨跌代替实体
-
-            # 改用：如果收盘价 > (高+低)/2 视为偏多
+            # 用收盘价相对中价的位置判断多空方向
             mid_price = (float(highs[i]) + float(lows[i])) / 2 \
                 if i < len(highs) and i < len(lows) else closes[i]
 

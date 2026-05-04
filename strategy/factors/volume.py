@@ -89,20 +89,22 @@ class VolumeFactor(FactorBase):
         sub_scores.append(obv_score * self.params["obv_trend_w"])
 
         # ---- 4. 成交量动量 (Volume Momentum) ----
+        recent_avg_vol = 0.0
+        prev_avg_vol = 0.0
         vol_momentum_score = 0
         if len(volumes_arr) > 10:
-            recent_avg_vol = np.mean(volumes_arr[-5:])
-            prev_avg_vol = np.mean(volumes_arr[-10:-5])
+            recent_avg_vol = float(np.mean(volumes_arr[-5:]))
+            prev_avg_vol = float(np.mean(volumes_arr[-10:-5]))
             if prev_avg_vol > 0:
                 vol_change = (recent_avg_vol - prev_avg_vol) / prev_avg_vol
-                if vol_change > 0.3:     # 放量中
+                if vol_change > 0.3:
                     vol_momentum_score = 0.25
-                elif vol_change < -0.2:  # 缩量中
+                elif vol_change < -0.2:
                     vol_momentum_score = -0.15
 
         details["vol_momentum"] = {
-            "recent_5d_avg": round(float(recent_avg_vol) if 'recent_avg_vol' in dir() else 0, 0),
-            "prev_5d_avg": round(float(prev_avg_vol) if 'prev_avg_vol' in dir() else 0, 0),
+            "recent_5d_avg": round(recent_avg_vol, 0),
+            "prev_5d_avg": round(prev_avg_vol, 0),
             "score": round(vol_momentum_score, 3),
         }
         sub_scores.append(vol_momentum_score * self.params["vol_momentum_w"])

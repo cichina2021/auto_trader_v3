@@ -75,7 +75,7 @@ class VaRCalculator:
 
         # ---- 条件期望损失 Expected Shortfall (CVaR/ES) ----
         tail_returns = sorted_returns[:max(index + 1, 1)]
-        es = abs(np.mean(tail_results := tail_returns)) if len(tail_returns) > 0 else var_value
+        es = abs(np.mean(tail_returns)) if len(tail_returns) > 0 else var_value
 
         result = {
             "var_pct": round(float(var_value), 6),

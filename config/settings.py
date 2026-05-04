@@ -1,75 +1,98 @@
 # ============================================================
-# AutoTrader v3.0 — 全局配置
-# 专业级A股T+0量化做T系统
+# AutoTrader v3.0 — 全局配置 (修复版)
+# 自动从 stock_pool.json 加载全部监控股票
 # ============================================================
 
+import os
+import sys
+import json
 from pathlib import Path
 
-# ---- 持仓配置（支持多股票，按代码索引）----
-POSITIONS = {
-    "002539": {
-        "name": "云图控股",
-        "base_shares": 15300,       # 底仓，不做T时不动
-        "base_cost": 10.731,        # 底仓成本价
-        "t_shares": 2400,           # 最大做T仓位（单次）
-        "t_shares_held": 2400,      # 当前持有做T仓位（运行时动态更新）
-    },
-    # 可在此添加更多持仓标的：
-    # "000858": {
-    #     "name": "五粮液",
-    #     "base_shares": 5000,
-    #     "base_cost": 150.00,
-    #     "t_shares": 1000,
-    #     "t_shares_held": 1000,
-    # },
-}
+# ---- 股票池配置（自动从 stock_pool.json 加载）----
+# 默认做T仓位配置（用于未单独配置的股票）
+DEFAULT_T_SHARES = 1000          # 默认T仓上限（1000股）
+DEFAULT_BASE_SHARES = 0          # 无底仓，纯做T
+DEFAULT_BASE_COST = 0.0
 
-# ---- 自选股池文件路径 ----
-STOCK_POOL_FILE = "/Users/dl/.qclaw/workspace/StockSel/data/my_stock_pool.txt"
+# 加载 stock_pool.json（支持相对路径和绝对路径）
+_POOL_FILE = Path(__file__).parent.parent / "stock_pool.json"
+# 如果相对路径找不到，尝试程序所在目录（PyInstaller打包后__file__会变化）
+if not _POOL_FILE.exists():
+    # 尝试程序根目录（即 stock_pool.json 和 main.py 同目录）
+    _exe_dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent.parent
+    _POOL_FILE = _exe_dir / "stock_pool.json"
+
+if _POOL_FILE.exists():
+    with open(_POOL_FILE, "r", encoding="utf-8") as f:
+        _raw_pool = json.load(f)
+    POSITIONS = {}
+    for item in _raw_pool:
+        code = item.get("code", "")
+        name = item.get("name", code)
+        if code:
+            POSITIONS[code] = {
+                "name": name,
+                "base_shares": DEFAULT_BASE_SHARES,
+                "base_cost": DEFAULT_BASE_COST,
+                "t_shares": DEFAULT_T_SHARES,
+                "t_shares_held": DEFAULT_T_SHARES,
+            }
+    print(f"✅ 从 stock_pool.json 加载了 {len(POSITIONS)} 只股票")
+else:
+    # 回退：只监控云图控股
+    POSITIONS = {
+        "002539": {
+            "name": "云图控股",
+            "base_shares": 15300,
+            "base_cost": 10.731,
+            "t_shares": 2400,
+            "t_shares_held": 2400,
+        },
+    }
+    print(f"⚠️ 未找到 stock_pool.json，退回到默认配置（{len(POSITIONS)} 只）")
+
+# ---- 信号文件输出目录 ----
+_SIGNAL_DIR = Path(__file__).parent.parent / "trading_signals"
+if getattr(sys, 'frozen', False):
+    _SIGNAL_DIR = Path(sys.executable).parent / "trading_signals"
+SIGNAL_DIR = _SIGNAL_DIR
 
 # ---- 交易时间配置 ----
 TRADE_START = "09:30"
-TRADE_END = "14:57"               # 14:57停止，留3分钟缓冲
+TRADE_END = "14:57"
 LUNCH_START = "11:30"
 LUNCH_END = "13:00"
 
-# 日内时间窗口定义（用于策略权重调整）
 TIME_WINDOWS = {
-    "open":   ("09:30", "10:00"),  # 开盘窗口：波动剧烈
-    "morning": ("10:00", "11:30"), # 上午盘：正常
-    "afternoon": ("13:00", "14:30"),# 主力窗口
-    "close":  ("14:30", "14:57"),  # 尾盘窗口
+    "open":     ("09:30", "10:00"),
+    "morning":  ("10:00", "11:30"),
+    "afternoon":("13:00", "14:30"),
+    "close":    ("14:30", "14:57"),
 }
 
 # ---- 主循环间隔（秒）----
-LOOP_INTERVAL = 30                # 每30秒检查一次信号
+LOOP_INTERVAL = 60
 
 # ---- 数据源配置 ----
 DATA_SOURCE_PRIORITY = ["akshare", "sina", "tencent"]
-DATA_RATE_LIMIT = 60              # 每60秒最多请求次数
+DATA_RATE_LIMIT = 60
 
 # ---- 执行层配置 ----
 EXECUTION = {
-    # 模式: mock=模拟 / signal=仅输出信号(默认) / live=实盘自动交易
     "mode": "signal",
-
-    # ths_trades WEB API（需Win虚拟机部署，默认关闭）
     "ths_web_host": "127.0.0.1",
     "ths_web_port": 6003,
-
-    # 文件信号输出路径（默认开启）
-    "signal_dir": "/Volumes/pclouds/Shared/trading_signals",
-
-    # 同花顺客户端路径（备用）
+    "signal_dir": str(SIGNAL_DIR),
     "ths_exe_path": r"C:\同花顺软件\同花顺\xiadan.exe",
 }
 
 # ---- HTTP监控面板 ----
 HTTP_PORT = 8080
-HTTP_BIND = "127.0.0.1"         # 绑定地址（安全考虑只监听本地）
+HTTP_BIND = "0.0.0.0"
 
 # ---- 日志配置 ----
-LOG_DIR = Path("/Users/dl/WorkBuddy/20260425075457/auto_trader_v3/logs")
+_log_base = Path.home() / "Documents" / "auto_trader_v3"
+LOG_DIR = _log_base
 LOG_LEVEL = "INFO"
-LOG_MAX_SIZE_MB = 50             # 单个日志文件最大50MB
-LOG_BACKUP_COUNT = 5             # 保留5个备份日志
+LOG_MAX_SIZE_MB = 50
+LOG_BACKUP_COUNT = 5

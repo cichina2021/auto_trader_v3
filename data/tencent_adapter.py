@@ -81,10 +81,8 @@ class TencentAdapter:
             return []
 
         result = []
-        pattern = r'[a-z]_([a-z]{2})(\d+)="([^"]*)"'
-        matches = re.findall(pattern, text)
-
-        for prefix, code, content in matches:
+        # 腾讯格式: v_sh002539="..." → 匹配 sh002539
+        pattern = r'_([a-z]{2})(\d{6})="([^"]*)"'
             parts = content.split('~')
             if len(parts) < 45:
                 continue
