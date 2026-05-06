@@ -57,7 +57,7 @@ hidden_imports = [
     'execution.file_signal', 'execution.ths_trades_adapter',
     'backtest', 'backtest.engine', 'backtest.t1_constraint',
     'backtest.cost_model', 'backtest.performance', 'backtest.data_loader',
-    'monitor', 'monitor.alerts', 'monitor.logger', 'monitor.web_dashboard',
+    'monitor', 'monitor.alerts', 'monitor.logger', 'monitor.web_dashboard', 'monitor.gui',
     # 第三方依赖
     'numpy', 'numpy.core', 'numpy.core.multiarray', 'numpy.linalg',
     'pandas', 'pandas._libs', 'pandas._libs.tslibs',
@@ -70,6 +70,8 @@ hidden_imports = [
     'dateutil', 'six', 'typing_extensions', 'pytz',
     # 编码
     'encodings', 'encodings.utf_8', 'encodings.gbk', 'encodings.cp936',
+    # tkinter GUI
+    'tkinter', 'tkinter.ttk', 'tkinter.scrolledtext', 'tkinter.messagebox',
     # 并发
     'multiprocessing', 'threading', 'concurrent.futures',
     # akshare依赖链
@@ -87,7 +89,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'tkinter', 'matplotlib', 'scipy', 'PIL', 'Pillow',
+        'matplotlib', 'scipy', 'PIL', 'Pillow',
         'IPython', 'jupyter', 'notebook', 'pytest', 'cv2',
         'torch', 'tensorflow', 'keras', 'sympy', 'nbconvert',
         'notebook', 'IPython', 'jupyter_client', 'jupyter_core',
@@ -112,7 +114,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

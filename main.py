@@ -70,6 +70,7 @@ from execution.ths_trades_adapter import ThsTradesAdapter
 from monitor.web_dashboard import DashboardHandler
 from monitor.logger import setup_logger
 from monitor.alerts import AlertManager
+from monitor.gui import TradingGUI
 
 logger = logging.getLogger("auto_trader")
 
@@ -334,13 +335,57 @@ def main():
     """程序入口。"""
     parser = argparse.ArgumentParser(description="A股做T量化交易系统 v3.0")
     parser.add_argument("--backtest", action="store_true", help="运行历史回测")
+    parser.add_argument("--cli", action="store_true", help="命令行模式（无GUI）")
+    parser.add_argument("--web", action="store_true", help="Web面板模式")
     args = parser.parse_args()
 
     if args.backtest:
         run_backtest()
-    else:
+    elif args.cli or args.web:
+        # 命令行或Web模式
         system = TradingSystem()
         system.run()
+    else:
+        # 默认GUI模式
+        try:
+            import tkinter as tk
+            # 测试tkinter是否可用
+            tk.Tcl()
+            
+            # 启动交易系统（后台线程）
+            system = TradingSystem()
+            
+            # 在后台启动交易循环
+            def run_trading():
+                try:
+                    # 启动Web面板
+                    try:
+                        from http.server import HTTPServer
+                        server = HTTPServer(("0.0.0.0", 8080), DashboardHandler)
+                        DashboardHandler.get_state = lambda self: system.get_system_state()
+                        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+                        server_thread.start()
+                        logging.info("Web面板: http://localhost:8080")
+                    except Exception as e:
+                        logging.error(f"Web面板启动失败: {e}")
+                    
+                    # 启动主循环
+                    system.run()
+                except Exception as e:
+                    logging.error(f"交易循环异常: {e}")
+                    
+            trading_thread = threading.Thread(target=run_trading, daemon=True)
+            trading_thread.start()
+            
+            # 启动GUI（主线程）
+            gui = TradingGUI(system)
+            gui.run()
+            
+        except ImportError:
+            # tkinter不可用，回退到命令行模式
+            print("警告: tkinter不可用，使用命令行模式")
+            system = TradingSystem()
+            system.run()
 
 
 if __name__ == "__main__":
