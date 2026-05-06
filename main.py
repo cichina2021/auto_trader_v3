@@ -24,6 +24,36 @@ from http.server import HTTPServer
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_ROOT)
 
+# 顶层异常捕获（打包后无控制台时也能看到错误信息）
+def _setup_global_excepthook():
+    """捕获所有未处理异常，避免闪退无提示。"""
+    def hook(exc_type, exc_val, exc_tb):
+        import traceback
+        import ctypes
+        msg = (
+            f"{'='*50}\n"
+            f"AutoTrader v3.0 发生未处理错误\n"
+            f"{'='*50}\n"
+            f"类型: {exc_type.__name__}\n"
+            f"信息: {exc_val}\n"
+            f"{'='*50}\n"
+            f"{traceback.format_exc()}"
+        )
+        print(msg, flush=True)
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                f"AutoTrader v3.0 错误\n\n{exc_type.__name__}: {exc_val}\n\n请截图发给我",
+                "AutoTrader 错误",
+                0x00000010  # MB_ICONERROR
+            )
+        except Exception:
+            pass
+    import sys
+    sys.excepthook = hook
+
+_setup_global_excepthook()
+
 from config.settings import (
     POSITIONS, EXECUTION, HTTP_PORT, LOOP_INTERVAL,
     LOG_DIR, LOG_LEVEL,
@@ -320,13 +350,28 @@ if __name__ == "__main__":
         print("\n用户中断，程序退出。")
         sys.exit(0)
     except Exception as e:
-        print(f"\n{'='*60}")
-        print(f"程序启动失败!")
-        print(f"{'='*60}")
-        print(f"错误: {type(e).__name__}: {e}")
-        print(f"{'='*60}")
-        import traceback
-        traceback.print_exc()
-        print(f"\n请将以上错误信息截图反馈。")
-        input("\n按回车键退出...")
+        import traceback, os
+        error_msg = (
+            f"{'='*60}\n"
+            f"程序启动失败!\n"
+            f"{'='*60}\n"
+            f"错误: {type(e).__name__}: {e}\n"
+            f"{'='*60}\n"
+            f"{traceback.format_exc()}\n"
+            f"{'='*60}\n"
+            f"请将以上错误信息截图反馈。\n"
+        )
+        print(error_msg)
+        # Windows弹窗显示错误（即使关闭了控制台也能看到）
+        try:
+            import ctypes
+            MB_OK = 0x00000001
+            ctypes.windll.user32.MessageBoxW(
+                0, 
+                f"程序启动失败!\n\n{type(e).__name__}: {e}\n\n请查看上方详细信息。",
+                "AutoTrader v3.0 错误",
+                MB_OK
+            )
+        except Exception:
+            pass
         sys.exit(1)
