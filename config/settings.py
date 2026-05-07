@@ -39,12 +39,12 @@ if _POOL_FILE.exists():
             }
     print(f"✅ 从 stock_pool.json 加载了 {len(POSITIONS)} 只股票")
 else:
-    # 回退：只监控云图控股
+    # 回退：只监控云图控股（大哥的持仓）
     POSITIONS = {
         "002539": {
             "name": "云图控股",
-            "base_shares": 15300,
-            "base_cost": 10.731,
+            "base_shares": 14900,      # 大哥持仓：14900股
+            "base_cost": 10.625,       # 成本价：10.625
             "t_shares": 2400,
             "t_shares_held": 2400,
         },

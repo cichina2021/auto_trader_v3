@@ -9,7 +9,7 @@ AutoTrader V3 桌面GUI - tkinter版本
 - 交易记录
 """
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, messagebox
 import threading
 import time
 from datetime import datetime
@@ -64,6 +64,8 @@ class TradingGUI:
         menubar.add_cascade(label="系统", menu=system_menu)
         system_menu.add_command(label="启动交易", command=self._start_trading)
         system_menu.add_command(label="停止交易", command=self._stop_trading)
+        system_menu.add_separator()
+        system_menu.add_command(label="管理持仓...", command=self._manage_positions)
         system_menu.add_separator()
         system_menu.add_command(label="退出", command=self._on_close)
         
@@ -482,6 +484,161 @@ class TradingGUI:
         
         tk.Button(about, text="确定", command=about.destroy,
                  width=10).pack(pady=10)
+        
+    def _manage_positions(self):
+        """管理持仓对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("持仓管理")
+        dialog.geometry("500x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 当前持仓列表
+        list_frame = tk.Frame(dialog, padx=10, pady=10)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+        
+        tk.Label(list_frame, text="当前持仓:", font=("Microsoft YaHei", 11, "bold")).pack(anchor=tk.W)
+        
+        # 列表框
+        self.pos_listbox = tk.Listbox(list_frame, height=8, font=("Microsoft YaHei", 10))
+        self.pos_listbox.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # 刷新列表
+        self._refresh_position_list()
+        
+        # 按钮区
+        btn_frame = tk.Frame(dialog, padx=10, pady=5)
+        btn_frame.pack(fill=tk.X)
+        
+        tk.Button(btn_frame, text="添加持仓", command=lambda: self._add_position_dialog(dialog),
+                 width=12).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="删除选中", command=lambda: self._delete_position(dialog),
+                 width=12).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="保存到文件", command=self._save_positions,
+                 width=12).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="关闭", command=dialog.destroy,
+                 width=10).pack(side=tk.RIGHT, padx=5)
+        
+    def _refresh_position_list(self):
+        """刷新持仓列表"""
+        self.pos_listbox.delete(0, tk.END)
+        if self.trading_system and hasattr(self.trading_system, 'positions'):
+            for code, pos in self.trading_system.positions.items():
+                name = pos.get('name', code)
+                shares = pos.get('base_shares', 0)
+                cost = pos.get('base_cost', 0)
+                self.pos_listbox.insert(tk.END, f"{code} | {name} | {shares}股 | 成本¥{cost}")
+        else:
+            # 显示默认持仓
+            self.pos_listbox.insert(tk.END, "002539 | 云图控股 | 14900股 | 成本¥10.625")
+            
+    def _add_position_dialog(self, parent):
+        """添加持仓对话框"""
+        dialog = tk.Toplevel(parent)
+        dialog.title("添加持仓")
+        dialog.geometry("300x250")
+        dialog.transient(parent)
+        dialog.grab_set()
+        
+        # 输入框
+        tk.Label(dialog, text="股票代码:", font=("Microsoft YaHei", 10)).pack(anchor=tk.W, padx=10, pady=(10,0))
+        code_entry = tk.Entry(dialog, font=("Microsoft YaHei", 10))
+        code_entry.pack(fill=tk.X, padx=10, pady=2)
+        code_entry.insert(0, "")
+        
+        tk.Label(dialog, text="股票名称:", font=("Microsoft YaHei", 10)).pack(anchor=tk.W, padx=10, pady=(10,0))
+        name_entry = tk.Entry(dialog, font=("Microsoft YaHei", 10))
+        name_entry.pack(fill=tk.X, padx=10, pady=2)
+        
+        tk.Label(dialog, text="持仓数量:", font=("Microsoft YaHei", 10)).pack(anchor=tk.W, padx=10, pady=(10,0))
+        shares_entry = tk.Entry(dialog, font=("Microsoft YaHei", 10))
+        shares_entry.pack(fill=tk.X, padx=10, pady=2)
+        shares_entry.insert(0, "0")
+        
+        tk.Label(dialog, text="成本价:", font=("Microsoft YaHei", 10)).pack(anchor=tk.W, padx=10, pady=(10,0))
+        cost_entry = tk.Entry(dialog, font=("Microsoft YaHei", 10))
+        cost_entry.pack(fill=tk.X, padx=10, pady=2)
+        cost_entry.insert(0, "0.0")
+        
+        def do_add():
+            code = code_entry.get().strip()
+            name = name_entry.get().strip() or code
+            try:
+                shares = int(shares_entry.get())
+                cost = float(cost_entry.get())
+            except ValueError:
+                tk.messagebox.showerror("错误", "持仓数量和成本价必须是数字")
+                return
+                
+            if not code:
+                tk.messagebox.showerror("错误", "股票代码不能为空")
+                return
+                
+            # 添加到系统
+            if self.trading_system and hasattr(self.trading_system, 'positions'):
+                self.trading_system.positions[code] = {
+                    'name': name,
+                    'base_shares': shares,
+                    'base_cost': cost,
+                    't_shares': min(shares // 2, 2400),
+                    't_shares_held': min(shares // 2, 2400),
+                }
+            
+            self._log(f"添加持仓: {code} {name} {shares}股 @ ¥{cost}")
+            self._refresh_position_list()
+            dialog.destroy()
+            
+        tk.Button(dialog, text="确定", command=do_add, width=10).pack(pady=15)
+        
+    def _delete_position(self, parent):
+        """删除选中持仓"""
+        selection = self.pos_listbox.curselection()
+        if not selection:
+            tk.messagebox.showwarning("提示", "请先选择要删除的持仓")
+            return
+            
+        item = self.pos_listbox.get(selection[0])
+        code = item.split(" | ")[0]
+        
+        if tk.messagebox.askyesno("确认", f"确定删除持仓 {code} 吗?"):
+            if self.trading_system and hasattr(self.trading_system, 'positions'):
+                if code in self.trading_system.positions:
+                    del self.trading_system.positions[code]
+                    self._log(f"删除持仓: {code}")
+            self._refresh_position_list()
+            
+    def _save_positions(self):
+        """保存持仓到文件"""
+        try:
+            import json
+            from pathlib import Path
+            
+            save_path = Path.home() / "Documents" / "auto_trader_v3" / "positions.json"
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            positions = {}
+            if self.trading_system and hasattr(self.trading_system, 'positions'):
+                positions = self.trading_system.positions
+            else:
+                # 默认持仓
+                positions = {
+                    "002539": {
+                        "name": "云图控股",
+                        "base_shares": 14900,
+                        "base_cost": 10.625,
+                        "t_shares": 2400,
+                        "t_shares_held": 2400,
+                    }
+                }
+                
+            with open(save_path, 'w', encoding='utf-8') as f:
+                json.dump(positions, f, ensure_ascii=False, indent=2)
+                
+            self._log(f"持仓已保存到: {save_path}")
+            tk.messagebox.showinfo("成功", f"持仓已保存到:\n{save_path}")
+        except Exception as e:
+            self._log(f"保存持仓失败: {e}")
+            tk.messagebox.showerror("错误", f"保存失败: {e}")
         
     def _on_close(self):
         """关闭窗口"""
