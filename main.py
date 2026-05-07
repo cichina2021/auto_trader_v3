@@ -162,6 +162,7 @@ class TradingSystem:
                         "pnl": 0.0,
                         "pnl_pct": 0.0,
                         "name": name,
+                        "current_price": base_cost,  # 初始现价=成本价，后续刷新时更新
                         "is_base_position": True,  # 标记为底仓
                     }
                     self.logger.info(f"[初始持仓] {name}({code}): {base_shares}股 @ ¥{base_cost}")
@@ -173,8 +174,36 @@ class TradingSystem:
         self.logger.info("收到停止信号 (%s)，正在安全关闭...", signum)
         self.running = False
 
+    def _refresh_position_prices(self):
+        """刷新持仓的实时价格（从数据源获取最新行情）"""
+        try:
+            codes = list(self.risk_manager.position_mgr._positions.keys())
+            if not codes:
+                return
+            quotes = self.data_source.get_realtime(codes)
+            if quotes:
+                for q in quotes:
+                    code = q.get("code", "")
+                    price = q.get("price", 0)
+                    name = q.get("name", "")
+                    pos = self.risk_manager.position_mgr._positions.get(code)
+                    if pos and price > 0:
+                        pos["current_price"] = price
+                        if not pos.get("name") or pos.get("name") == code:
+                            pos["name"] = name or pos.get("name", code)
+                        cost = pos.get("entry_price", 0)
+                        shares = pos.get("shares", 0)
+                        pos["pnl"] = round((price - cost) * shares, 2)
+                        pos["pnl_pct"] = round(((price / cost) - 1) * 100, 2) if cost > 0 else 0
+                self.logger.info(f"刷新了 {len(quotes)} 只持仓实时价格")
+        except Exception as e:
+            self.logger.warning(f"刷新持仓价格失败（可能网络不通）: {e}")
+
     def get_system_state(self) -> dict:
-        """返回完整系统状态（供Web面板使用）。"""
+        """返回完整系统状态（供Web面板/GUI使用）。"""
+        # 每次获取状态时先刷新持仓价格
+        self._refresh_position_prices()
+        
         risk_status = self.risk_manager.get_status()
         exec_status = self.execution.get_status()
 
@@ -222,6 +251,10 @@ class TradingSystem:
 
         self.scan_count += 1
         self.logger.info(f"--- 第 {self.scan_count} 轮扫描 ({len(codes)} 只股票) ---")
+        
+        # 显示数据源状态
+        ds_status = DataSourceManager.get_status()
+        self.logger.info(f"数据源: {ds_status['adapters']} | 交易时间: {ds_status['trading_time']}")
 
         try:
             # 获取所有股票的信号

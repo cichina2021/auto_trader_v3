@@ -359,19 +359,24 @@ class TradingGUI:
         for code, pos in positions.items():
             shares = pos.get('shares', 0)
             cost = pos.get('entry_price', pos.get('avg_cost', 0))
-            current = pos.get('current_price', cost)
+            current = pos.get('current_price', pos.get('current_price', cost))
             name = pos.get('name', code)
-            pnl = (current - cost) * shares
-            pnl_pct = ((current / cost) - 1) * 100 if cost > 0 else 0
+            pnl = pos.get('pnl', 0)
+            pnl_pct = pos.get('pnl_pct', 0)
+            
+            # 如果没有pnl，手动计算
+            if pnl == 0 and current > 0 and cost > 0:
+                pnl = (current - cost) * shares
+                pnl_pct = ((current / cost) - 1) * 100
             
             self.positions_tree.insert('', tk.END, values=(
                 code,
                 name,
                 f"{shares:,}",
                 f"¥{cost:.2f}",
-                f"¥{current:.2f}",
-                f"¥{pnl:,.2f}",
-                f"{pnl_pct:+.2f}%"
+                f"¥{current:.2f}" if current else "--",
+                f"¥{pnl:,.2f}" if pnl else "--",
+                f"{pnl_pct:+.2f}%" if pnl_pct else "--"
             ))
             
     def _update_signals(self, signals):
@@ -397,17 +402,27 @@ class TradingGUI:
             
     def _update_risk(self, risk):
         """更新风险指标"""
+        var_val = risk.get('var_95', 0) or risk.get('var', {}).get('var_95', 0)
+        if isinstance(var_val, dict):
+            var_val = var_val.get('value', 0)
+        
         self.risk_labels['var_95'].config(
-            text=f"¥{risk.get('var_95', 0):,.2f}"
+            text=f"¥{float(var_val or 0):,.2f}"
         )
+        
+        dd = risk.get('max_drawdown_pct', 0) or 0
         self.risk_labels['max_drawdown'].config(
-            text=f"{risk.get('max_drawdown_pct', 0):.2f}%"
+            text=f"{float(dd):.2f}%"
         )
+        
+        dl = risk.get('daily_limit_used', 0) or risk.get('daily_pnl_pct', 0) or 0
         self.risk_labels['daily_limit'].config(
-            text=f"{risk.get('daily_limit_used', 0):.1f}%"
+            text=f"{float(dl):.1f}%"
         )
+        
+        pr = risk.get('position_ratio', 0) or 0
         self.risk_labels['position_ratio'].config(
-            text=f"{risk.get('position_ratio', 0):.1f}%"
+            text=f"{float(pr):.1f}%"
         )
         
     def _update_trades(self, trades):
@@ -468,12 +483,25 @@ class TradingGUI:
         self.log_text.config(state=tk.DISABLED)
         
     def _start_trading(self):
-        """启动交易"""
-        self._log("启动交易系统...")
+        """启动交易（手动触发一次扫描）"""
+        self._log("手动触发扫描...")
+        if self.trading_system:
+            # 在后台线程执行扫描
+            def do_scan():
+                try:
+                    self.trading_system.scan_and_trade()
+                    self.root.after(0, lambda: self._log(f"扫描完成 | 共 {self.trading_system.scan_count} 轮"))
+                    self.root.after(0, self._refresh_data)
+                except Exception as e:
+                    self.root.after(0, lambda e=e: self._log(f"扫描异常: {e}"))
+            threading.Thread(target=do_scan, daemon=True).start()
         
     def _stop_trading(self):
         """停止交易"""
-        self._log("停止交易系统...")
+        if self.trading_system:
+            self.trading_system.running = False
+            self._log("交易循环已停止")
+            self.status_label.config(text="⏹ 已停止", fg=self.colors['text'])
         
     def _show_about(self):
         """显示关于对话框"""
@@ -664,7 +692,17 @@ class TradingGUI:
         
     def run(self):
         """启动GUI主循环"""
+        # 启动后延迟3秒自动刷新一次数据（等交易系统初始化完成）
+        self.root.after(3000, self._on_startup_refresh)
         self.root.mainloop()
+        
+    def _on_startup_refresh(self):
+        """GUI启动后自动刷新一次数据并触发扫描"""
+        self._log("系统就绪，正在获取数据...")
+        self._refresh_data()
+        # 自动触发一次扫描
+        if self.trading_system:
+            self._start_trading()
 
 
 def run_gui(trading_system=None):
