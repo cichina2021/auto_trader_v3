@@ -50,6 +50,7 @@ class TradingGUI:
         # 启动数据刷新线程
         self.refresh_thread = threading.Thread(target=self._auto_refresh, daemon=True)
         self.refresh_thread.start()
+        self._initial_price_loaded = False
         
         # 窗口关闭处理
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -318,6 +319,14 @@ class TradingGUI:
             return
             
         try:
+            # 首次更新时强制刷新价格（解决价格刷新时序问题）
+            if not self._initial_price_loaded:
+                self._initial_price_loaded = True
+                try:
+                    self.trading_system._refresh_position_prices()
+                except Exception:
+                    pass
+            
             state = self.trading_system.get_system_state()
             
             # 更新状态
@@ -368,7 +377,7 @@ class TradingGUI:
         for code, pos in positions.items():
             shares = pos.get('shares', 0)
             cost = pos.get('entry_price', pos.get('avg_cost', 0))
-            current = pos.get('current_price', pos.get('current_price', cost))
+            current = pos.get('current_price') or cost
             name = pos.get('name', code)
             pnl = pos.get('pnl', 0)
             pnl_pct = pos.get('pnl_pct', 0)
@@ -384,8 +393,8 @@ class TradingGUI:
                 f"{shares:,}",
                 f"¥{cost:.2f}",
                 f"¥{current:.2f}" if current else "--",
-                f"¥{pnl:,.2f}" if pnl else "--",
-                f"{pnl_pct:+.2f}%" if pnl_pct else "--"
+                f"¥{pnl:,.2f}" if pnl is not None and pnl != 0 else "¥0.00",
+                f"{pnl_pct:+.2f}%" if pnl_pct is not None else "0.00%"
             ))
             
     def _update_signals(self, signals):
