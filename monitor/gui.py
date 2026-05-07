@@ -35,8 +35,8 @@ class TradingGUI:
             'accent': '#0f3460',
             'text': '#eee',
             'text_secondary': '#aaa',
-            'up': '#ff4d4d',      # A股红色涨
-            'down': '#00cc66',    # A股绿色跌
+            'up': '#ff4d4d',      # A股红色涨（买）
+            'down': '#00cc66',    # A股绿色跌（卖）
             'border': '#2d3748'
         }
         
@@ -109,7 +109,7 @@ class TradingGUI:
         self._create_log_panel(main_frame)
         
     def _create_header(self, parent):
-        """创建顶部状态栏"""
+        """创建顶部状态栏 - 只显示当日盈亏，去掉总资产"""
         header = tk.Frame(parent, bg=self.colors['bg_secondary'], 
                          highlightbackground=self.colors['border'], 
                          highlightthickness=1)
@@ -129,20 +129,9 @@ class TradingGUI:
                                   fg=self.colors['text_secondary'])
         self.time_label.pack(side=tk.RIGHT, padx=20, pady=10)
         
-        # 资金信息
+        # 资金信息 - 只显示当日盈亏
         self.capital_frame = tk.Frame(header, bg=self.colors['bg_secondary'])
         self.capital_frame.pack(side=tk.RIGHT, padx=20)
-        
-        tk.Label(self.capital_frame, text="总资产: ", 
-                font=("Microsoft YaHei", 11),
-                bg=self.colors['bg_secondary'],
-                fg=self.colors['text_secondary']).pack(side=tk.LEFT)
-        
-        self.capital_label = tk.Label(self.capital_frame, text="¥0.00",
-                                     font=("Microsoft YaHei", 11, "bold"),
-                                     bg=self.colors['bg_secondary'],
-                                     fg=self.colors['text'])
-        self.capital_label.pack(side=tk.LEFT)
         
         tk.Label(self.capital_frame, text="  当日盈亏: ", 
                 font=("Microsoft YaHei", 11),
@@ -192,13 +181,14 @@ class TradingGUI:
                                      highlightthickness=1)
         signals_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
         
-        columns2 = ('时间', '代码', '动作', '价格', '置信度', '原因')
+        # 持仓表只显示仓位提醒，信号表独立显示
+        columns2 = ('时间', '代码', '动作', '价格', '原因')
         self.signals_tree = ttk.Treeview(signals_frame, columns=columns2, 
-                                        show='headings', height=6)
+                                        show='headings', height=4)
         
         for col in columns2:
             self.signals_tree.heading(col, text=col)
-            width = 150 if col == '原因' else 80
+            width = 200 if col == '原因' else 80
             self.signals_tree.column(col, width=width, anchor='center')
         
         scrollbar2 = ttk.Scrollbar(signals_frame, orient=tk.VERTICAL, 
@@ -260,7 +250,7 @@ class TradingGUI:
             height=12
         )
         self.trades_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        self.trades_text.insert(tk.END, "等待交易数据...\n")
+        self.trades_text.insert(tk.END, "暂无交易记录\n")
         self.trades_text.config(state=tk.DISABLED)
         
     def _create_log_panel(self, parent):
@@ -328,12 +318,9 @@ class TradingGUI:
             else:
                 self.status_label.config(text="⏹ 已停止", fg=self.colors['text'])
                 
-            # 更新资金
-            capital = state.get('capital', 0)
+            # 更新当日盈亏（去掉总资产）
             daily_pnl = state.get('daily_pnl', 0)
             daily_pnl_pct = state.get('daily_pnl_pct', 0)
-            
-            self.capital_label.config(text=f"¥{capital:,.2f}")
             
             pnl_color = self.colors['up'] if daily_pnl >= 0 else self.colors['down']
             pnl_sign = '+' if daily_pnl >= 0 else ''
@@ -360,18 +347,15 @@ class TradingGUI:
             
     def _update_positions(self, positions):
         """更新持仓表格"""
-        # 清空现有数据
         for item in self.positions_tree.get_children():
             self.positions_tree.delete(item)
         
-        # 如果没有持仓，显示提示信息
         if not positions:
             self.positions_tree.insert('', tk.END, values=(
                 "--", "没有符合条件的股票", "--", "--", "--", "--", "--"
             ))
             return
             
-        # 添加新数据
         for code, pos in positions.items():
             shares = pos.get('shares', 0)
             cost = pos.get('entry_price', pos.get('avg_cost', 0))
@@ -379,8 +363,6 @@ class TradingGUI:
             name = pos.get('name', code)
             pnl = (current - cost) * shares
             pnl_pct = ((current / cost) - 1) * 100 if cost > 0 else 0
-            
-            pnl_color = self.colors['up'] if pnl >= 0 else self.colors['down']
             
             self.positions_tree.insert('', tk.END, values=(
                 code,
@@ -393,27 +375,24 @@ class TradingGUI:
             ))
             
     def _update_signals(self, signals):
-        """更新信号表格"""
-        # 清空现有数据
+        """更新信号表格 - 持仓表只做仓位提醒，信号独立"""
         for item in self.signals_tree.get_children():
             self.signals_tree.delete(item)
         
-        # 如果没有信号，显示提示信息
         if not signals:
             self.signals_tree.insert('', tk.END, values=(
-                "--", "--", "暂无交易信号", "--", "--", "--"
+                "--", "--", "暂无交易信号", "--", "--"
             ))
             return
             
-        # 添加新数据（只显示最近10条）
         for signal in signals[-10:]:
+            action = signal.get('action', '--')
             self.signals_tree.insert('', 0, values=(
                 signal.get('time', '--'),
                 signal.get('code', '--'),
-                signal.get('action', '--'),
+                action,
                 f"¥{signal.get('price', 0):.2f}",
-                f"{signal.get('confidence', 0):.0%}",
-                signal.get('reason', '--')[:20]
+                signal.get('reason', '--')[:30]
             ))
             
     def _update_risk(self, risk):
@@ -432,7 +411,7 @@ class TradingGUI:
         )
         
     def _update_trades(self, trades):
-        """更新交易记录"""
+        """更新交易记录 - 买红色，卖绿色"""
         self.trades_text.config(state=tk.NORMAL)
         self.trades_text.delete(1.0, tk.END)
         
@@ -446,10 +425,26 @@ class TradingGUI:
                 price = trade.get('price', 0)
                 shares = trade.get('shares', 0)
                 pnl = trade.get('pnl', 0)
-                
                 pnl_str = f" 盈亏: ¥{pnl:,.2f}" if pnl != 0 else ""
-                line = f"{time_str} | {code} | {action} | {shares}股 @ ¥{price:.2f}{pnl_str}\n"
+                
+                # 买红卖绿，动作显示中文
+                if action.upper() in ('BUY', '买入'):
+                    action_cn = "买"
+                    color = self.colors['up']   # 红色
+                else:
+                    action_cn = "卖"
+                    color = self.colors['down']  # 绿色
+                
+                line = f"{time_str} | {code} | {action_cn} | {shares}股 @ ¥{price:.2f}{pnl_str}\n"
+                
+                # 先插入文字
+                end_idx = self.trades_text.index(tk.END)
                 self.trades_text.insert(tk.END, line)
+                
+                # 再上色（整行）
+                start_idx = f"{float(end_idx) - 1:.1f}.0"
+                self.trades_text.tag_add(f"trade_{time_str}", start_idx, end_idx)
+                self.trades_text.tag_config(f"trade_{time_str}", foreground=color)
                 
         self.trades_text.config(state=tk.DISABLED)
         
@@ -475,12 +470,10 @@ class TradingGUI:
     def _start_trading(self):
         """启动交易"""
         self._log("启动交易系统...")
-        # 这里可以调用交易系统的启动方法
         
     def _stop_trading(self):
         """停止交易"""
         self._log("停止交易系统...")
-        # 这里可以调用交易系统的停止方法
         
     def _show_about(self):
         """显示关于对话框"""
@@ -494,7 +487,7 @@ class TradingGUI:
                 font=("Microsoft YaHei", 16, "bold")).pack(pady=10)
         tk.Label(about, text="A股做T量化交易系统", 
                 font=("Microsoft YaHei", 11)).pack()
-        tk.Label(about, text="版本: 3.0.9", 
+        tk.Label(about, text="版本: 3.1.2", 
                 font=("Microsoft YaHei", 9)).pack(pady=5)
         
         tk.Button(about, text="确定", command=about.destroy,
@@ -508,20 +501,16 @@ class TradingGUI:
         dialog.transient(self.root)
         dialog.grab_set()
         
-        # 当前持仓列表
         list_frame = tk.Frame(dialog, padx=10, pady=10)
         list_frame.pack(fill=tk.BOTH, expand=True)
         
         tk.Label(list_frame, text="当前持仓:", font=("Microsoft YaHei", 11, "bold")).pack(anchor=tk.W)
         
-        # 列表框
         self.pos_listbox = tk.Listbox(list_frame, height=8, font=("Microsoft YaHei", 10))
         self.pos_listbox.pack(fill=tk.BOTH, expand=True, pady=5)
         
-        # 刷新列表
         self._refresh_position_list()
         
-        # 按钮区
         btn_frame = tk.Frame(dialog, padx=10, pady=5)
         btn_frame.pack(fill=tk.X)
         
@@ -537,14 +526,18 @@ class TradingGUI:
     def _refresh_position_list(self):
         """刷新持仓列表"""
         self.pos_listbox.delete(0, tk.END)
-        if self.trading_system and hasattr(self.trading_system, 'positions'):
-            for code, pos in self.trading_system.positions.items():
+        
+        if self.trading_system:
+            # 从 risk_manager.position_mgr 读取底仓信息
+            pm = self.trading_system.risk_manager.position_mgr
+            for code, pos in pm.get_all_positions().items():
                 name = pos.get('name', code)
-                shares = pos.get('base_shares', 0)
-                cost = pos.get('base_cost', 0)
-                self.pos_listbox.insert(tk.END, f"{code} | {name} | {shares}股 | 成本¥{cost}")
-        else:
-            # 显示默认持仓
+                shares = pos.get('shares', 0)
+                cost = pos.get('entry_price', 0)
+                if shares > 0:
+                    self.pos_listbox.insert(tk.END, f"{code} | {name} | {shares}股 | 成本¥{cost}")
+        
+        if self.pos_listbox.size() == 0:
             self.pos_listbox.insert(tk.END, "002539 | 云图控股 | 14900股 | 成本¥10.625")
             
     def _add_position_dialog(self, parent):
@@ -555,11 +548,9 @@ class TradingGUI:
         dialog.transient(parent)
         dialog.grab_set()
         
-        # 输入框
         tk.Label(dialog, text="股票代码:", font=("Microsoft YaHei", 10)).pack(anchor=tk.W, padx=10, pady=(10,0))
         code_entry = tk.Entry(dialog, font=("Microsoft YaHei", 10))
         code_entry.pack(fill=tk.X, padx=10, pady=2)
-        code_entry.insert(0, "")
         
         tk.Label(dialog, text="股票名称:", font=("Microsoft YaHei", 10)).pack(anchor=tk.W, padx=10, pady=(10,0))
         name_entry = tk.Entry(dialog, font=("Microsoft YaHei", 10))
@@ -584,19 +575,26 @@ class TradingGUI:
             except ValueError:
                 tk.messagebox.showerror("错误", "持仓数量和成本价必须是数字")
                 return
-                
             if not code:
                 tk.messagebox.showerror("错误", "股票代码不能为空")
                 return
-                
-            # 添加到系统
-            if self.trading_system and hasattr(self.trading_system, 'positions'):
-                self.trading_system.positions[code] = {
-                    'name': name,
-                    'base_shares': shares,
-                    'base_cost': cost,
-                    't_shares': min(shares // 2, 2400),
-                    't_shares_held': min(shares // 2, 2400),
+            
+            if self.trading_system:
+                pm = self.trading_system.risk_manager.position_mgr
+                pm._positions[code] = {
+                    "code": code,
+                    "entry_price": cost,
+                    "shares": shares,
+                    "action": "BUY",
+                    "entry_time": datetime.now(),
+                    "stop_loss": cost * 0.95,
+                    "take_profit": cost * 1.05,
+                    "highest_price": cost,
+                    "lowest_price": cost,
+                    "pnl": 0.0,
+                    "pnl_pct": 0.0,
+                    "name": name,
+                    "is_base_position": True,
                 }
             
             self._log(f"添加持仓: {code} {name} {shares}股 @ ¥{cost}")
@@ -616,9 +614,10 @@ class TradingGUI:
         code = item.split(" | ")[0]
         
         if tk.messagebox.askyesno("确认", f"确定删除持仓 {code} 吗?"):
-            if self.trading_system and hasattr(self.trading_system, 'positions'):
-                if code in self.trading_system.positions:
-                    del self.trading_system.positions[code]
+            if self.trading_system:
+                pm = self.trading_system.risk_manager.position_mgr
+                if code in pm._positions:
+                    del pm._positions[code]
                     self._log(f"删除持仓: {code}")
             self._refresh_position_list()
             
@@ -632,17 +631,19 @@ class TradingGUI:
             save_path.parent.mkdir(parents=True, exist_ok=True)
             
             positions = {}
-            if self.trading_system and hasattr(self.trading_system, 'positions'):
-                positions = self.trading_system.positions
+            if self.trading_system:
+                for code, pos in self.trading_system.risk_manager.position_mgr.get_all_positions().items():
+                    positions[code] = {
+                        "name": pos.get("name", code),
+                        "base_shares": pos.get("shares", 0),
+                        "base_cost": pos.get("entry_price", 0),
+                    }
             else:
-                # 默认持仓
                 positions = {
                     "002539": {
                         "name": "云图控股",
                         "base_shares": 14900,
                         "base_cost": 10.625,
-                        "t_shares": 2400,
-                        "t_shares_held": 2400,
                     }
                 }
                 
@@ -673,5 +674,4 @@ def run_gui(trading_system=None):
 
 
 if __name__ == "__main__":
-    # 测试模式
     run_gui()
