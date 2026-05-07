@@ -363,12 +363,20 @@ class TradingGUI:
         # 清空现有数据
         for item in self.positions_tree.get_children():
             self.positions_tree.delete(item)
+        
+        # 如果没有持仓，显示提示信息
+        if not positions:
+            self.positions_tree.insert('', tk.END, values=(
+                "--", "没有符合条件的股票", "--", "--", "--", "--", "--"
+            ))
+            return
             
         # 添加新数据
         for code, pos in positions.items():
             shares = pos.get('shares', 0)
-            cost = pos.get('avg_cost', 0)
+            cost = pos.get('entry_price', pos.get('avg_cost', 0))
             current = pos.get('current_price', cost)
+            name = pos.get('name', code)
             pnl = (current - cost) * shares
             pnl_pct = ((current / cost) - 1) * 100 if cost > 0 else 0
             
@@ -376,7 +384,7 @@ class TradingGUI:
             
             self.positions_tree.insert('', tk.END, values=(
                 code,
-                pos.get('name', code),
+                name,
                 f"{shares:,}",
                 f"¥{cost:.2f}",
                 f"¥{current:.2f}",
@@ -389,6 +397,13 @@ class TradingGUI:
         # 清空现有数据
         for item in self.signals_tree.get_children():
             self.signals_tree.delete(item)
+        
+        # 如果没有信号，显示提示信息
+        if not signals:
+            self.signals_tree.insert('', tk.END, values=(
+                "--", "--", "暂无交易信号", "--", "--", "--"
+            ))
+            return
             
         # 添加新数据（只显示最近10条）
         for signal in signals[-10:]:

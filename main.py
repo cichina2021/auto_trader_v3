@@ -96,6 +96,9 @@ class TradingSystem:
 
         self.logger.info("[风控层] 初始化 (Kelly + VaR + 多层限额)...")
         self.risk_manager = RiskManager(INITIAL_CAPITAL)
+        
+        # 加载初始持仓配置
+        self._load_initial_positions()
 
         self.logger.info("[策略层] 初始化 (多因子 + 贝叶斯融合)...")
         self.strategy_engine = StrategyEngine()
@@ -134,6 +137,36 @@ class TradingSystem:
         sig_module.signal(sig_module.SIGTERM, self._shutdown)
 
         self.logger.info("系统初始化完成")
+
+    def _load_initial_positions(self):
+        """从settings.POSITIONS加载初始持仓到风控系统"""
+        try:
+            from config.settings import POSITIONS
+            for code, config in POSITIONS.items():
+                base_shares = config.get("base_shares", 0)
+                base_cost = config.get("base_cost", 0)
+                name = config.get("name", code)
+                
+                if base_shares > 0 and base_cost > 0:
+                    # 记录到底仓跟踪（不触发实际交易）
+                    self.risk_manager.position_mgr._positions[code] = {
+                        "code": code,
+                        "entry_price": base_cost,
+                        "shares": base_shares,
+                        "action": "BUY",
+                        "entry_time": datetime.now(),
+                        "stop_loss": base_cost * 0.95,
+                        "take_profit": base_cost * 1.05,
+                        "highest_price": base_cost,
+                        "lowest_price": base_cost,
+                        "pnl": 0.0,
+                        "pnl_pct": 0.0,
+                        "name": name,
+                        "is_base_position": True,  # 标记为底仓
+                    }
+                    self.logger.info(f"[初始持仓] {name}({code}): {base_shares}股 @ ¥{base_cost}")
+        except Exception as e:
+            self.logger.error(f"加载初始持仓失败: {e}")
 
     def _shutdown(self, signum, frame):
         """信号处理：优雅关闭。"""
