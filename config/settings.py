@@ -37,7 +37,18 @@ if _POOL_FILE.exists():
                 "t_shares": DEFAULT_T_SHARES,
                 "t_shares_held": DEFAULT_T_SHARES,
             }
-    print(f"✅ 从 stock_pool.json 加载了 {len(POSITIONS)} 只股票")
+    # 强制覆盖大哥的真实持仓（stock_pool.json 里没有底仓数据）
+    _REAL_POSITIONS = {
+        "002539": {
+            "name": "云图控股",
+            "base_shares": 14900,   # 大哥真实持仓
+            "base_cost": 10.625,    # 成本价
+            "t_shares": 2400,
+            "t_shares_held": 2400,
+        },
+    }
+    POSITIONS.update(_REAL_POSITIONS)
+    print(f"✅ 从 stock_pool.json 加载了 {len(POSITIONS)} 只股票（含真实持仓）")
 else:
     # 回退：只监控云图控股（大哥的持仓）
     POSITIONS = {
