@@ -288,15 +288,24 @@ class TradingGUI:
         self.status_text.pack(side=tk.LEFT, padx=10)
         
     def _auto_refresh(self):
-        """自动刷新数据线程"""
+        """自动刷新数据线程（2秒更新界面，价格5秒刷新一次）"""
+        last_price_refresh = [0]
         while self.running:
             try:
                 self.root.after(0, self._update_time)
                 if self.trading_system:
                     self.root.after(0, self._update_data)
-                time.sleep(1)
+                # 价格刷新控制在5秒一次，避免触发频率限制
+                now = time.time()
+                if now - last_price_refresh[0] >= 5:
+                    last_price_refresh[0] = now
+                    def do_refresh_prices():
+                        if self.trading_system:
+                            self.trading_system._refresh_position_prices()
+                    threading.Thread(target=do_refresh_prices, daemon=True).start()
+                time.sleep(2)
             except Exception as e:
-                time.sleep(1)
+                time.sleep(2)
                 
     def _update_time(self):
         """更新时间显示"""
@@ -380,7 +389,7 @@ class TradingGUI:
             ))
             
     def _update_signals(self, signals):
-        """更新信号表格 - 持仓表只做仓位提醒，信号独立"""
+        """更新信号表格 - 显示股票名称"""
         for item in self.signals_tree.get_children():
             self.signals_tree.delete(item)
         
@@ -389,12 +398,23 @@ class TradingGUI:
                 "--", "--", "暂无交易信号", "--", "--"
             ))
             return
-            
+        
+        # 获取股票名称映射
+        name_map = {}
+        if self.trading_system:
+            try:
+                from config.settings import POSITIONS
+                name_map = {code: cfg.get("name", code) for code, cfg in POSITIONS.items()}
+            except Exception:
+                pass
+        
         for signal in signals[-10:]:
+            code = signal.get('code', '--')
+            name = name_map.get(code, code)
             action = signal.get('action', '--')
             self.signals_tree.insert('', 0, values=(
                 signal.get('time', '--'),
-                signal.get('code', '--'),
+                f"{name}({code})",
                 action,
                 f"¥{signal.get('price', 0):.2f}",
                 signal.get('reason', '--')[:30]
@@ -432,35 +452,38 @@ class TradingGUI:
         
         if not trades:
             self.trades_text.insert(tk.END, "暂无交易记录\n")
-        else:
-            for trade in trades:
-                time_str = trade.get('time', '--')
-                code = trade.get('code', '--')
-                action = trade.get('action', '--')
-                price = trade.get('price', 0)
-                shares = trade.get('shares', 0)
-                pnl = trade.get('pnl', 0)
-                pnl_str = f" 盈亏: ¥{pnl:,.2f}" if pnl != 0 else ""
-                
-                # 买红卖绿，动作显示中文
-                if action.upper() in ('BUY', '买入'):
-                    action_cn = "买"
-                    color = self.colors['up']   # 红色
-                else:
-                    action_cn = "卖"
-                    color = self.colors['down']  # 绿色
-                
-                line = f"{time_str} | {code} | {action_cn} | {shares}股 @ ¥{price:.2f}{pnl_str}\n"
-                
-                # 先插入文字
-                end_idx = self.trades_text.index(tk.END)
-                self.trades_text.insert(tk.END, line)
-                
-                # 再上色（整行）
-                start_idx = f"{float(end_idx) - 1:.1f}.0"
-                self.trades_text.tag_add(f"trade_{time_str}", start_idx, end_idx)
-                self.trades_text.tag_config(f"trade_{time_str}", foreground=color)
-                
+            self.trades_text.config(state=tk.DISABLED)
+            return
+        
+        buy_color = self.colors['up']    # 红买
+        sell_color = self.colors['down']  # 绿卖
+        
+        for trade in trades:
+            time_str = trade.get('time', '--')
+            code = trade.get('code', '--')
+            action = trade.get('action', '--')
+            price = trade.get('price', 0)
+            shares = trade.get('shares', 0)
+            pnl = trade.get('pnl', 0)
+            pnl_str = f" 盈亏: ¥{pnl:,.2f}" if pnl != 0 else ""
+            
+            if action.upper() in ('BUY', '买入'):
+                action_cn = "买"
+                color = buy_color
+            else:
+                action_cn = "卖"
+                color = sell_color
+            
+            line = f"{time_str} | {code} | {action_cn} | {shares}股 @ ¥{price:.2f}{pnl_str}\n"
+            
+            start_idx = self.trades_text.index(tk.END)
+            self.trades_text.insert(tk.END, line)
+            end_idx = self.trades_text.index(tk.END)
+            # 用唯一tag名（时间戳+行号防冲突）
+            tag = f"trade_{time_str}_{start_idx}"
+            self.trades_text.tag_add(tag, start_idx, end_idx)
+            self.trades_text.tag_config(tag, foreground=color)
+        
         self.trades_text.config(state=tk.DISABLED)
         
     def _log(self, message):
